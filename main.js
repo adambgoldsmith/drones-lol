@@ -2,6 +2,40 @@ import * as THREE from 'three';
 import { PointerLockControls } from 'https://cdn.jsdelivr.net/npm/three@0.146.0/examples/jsm/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
+async function getCanvasData(canvas) {
+    const ctx = canvas.getContext('2d');
+    // Convert to base64
+    const imageData = canvas.toDataURL('image/png');
+    return imageData;
+}
+
+async function predictSketch(canvasIndex) {
+    const canvas = drawingContexts[canvasIndex].canvas;
+    const imageData = await getCanvasData(canvas);
+    
+    try {
+        const response = await fetch('http://your-backend-url:8000/predict', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                image_data: imageData
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        return result.predictions[0].label; // Return top prediction
+        
+    } catch (error) {
+        console.error('Error predicting sketch:', error);
+        return null;
+    }
+}
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -158,12 +192,16 @@ document.addEventListener('mousedown', function() {
     isInteracting = true;
 });
 
-document.addEventListener('mouseup', function() {
+document.addEventListener('mouseup', async function() {
     isDrawing = false;
     isInteracting = false;
     if (currentCanvas !== null) {
-        // Here you would process the drawing with ML model
-        // drawingData[currentCanvas] = processDrawingWithML(drawingContexts[currentCanvas]);
+        const prediction = await predictSketch(currentCanvas);
+        if (prediction) {
+            drawingData[currentCanvas] = prediction;
+            // Optional: Display prediction somewhere in the scene
+            console.log(`Predicted: ${prediction}`);
+        }
     }
 });
 
@@ -265,12 +303,13 @@ function checkInteractions() {
     // Check for button interaction
     const buttonIntersects = raycaster.intersectObject(button);
     if (buttonIntersects.length > 0 && buttonIntersects[0].distance < interactionDistance) {
-        button.material.color.setHex(0x6666ff); // Highlight button
+        button.material.color.setHex(0x6666ff);
         if (controls.isLocked && isDrawing) {
-            // Here you would process all drawings and generate the final image
-            // const keywords = drawingData.filter(data => data !== null);
-            // const finalImage = await generateImageWithAI(keywords);
-            // Update main canvas with finalImage
+            const keywords = drawingData.filter(data => data !== null);
+            if (keywords.length > 0) {
+                console.log('Keywords for image generation:', keywords);
+                // Here you would call your image generation API with the keywords
+            }
         }
     } else {
         button.material.color.setHex(0x4444ff);
